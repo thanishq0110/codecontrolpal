@@ -42,6 +42,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     docker.io \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+# Create non-root user for running the application
+RUN useradd -m -s /bin/bash node
+
 # Create app directory
 WORKDIR /app
 
@@ -61,7 +64,7 @@ COPY --from=frontend-builder /build/frontend/dist ./public
 RUN mkdir -p /palworld /app/data && \
     chown -R node:node /app /palworld
 
-# Create app user for running as non-root
+# Switch to non-root user
 USER node
 
 # Expose port

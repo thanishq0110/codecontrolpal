@@ -14,8 +14,10 @@ Professional Docker-based management panel for Palworld servers. Create, manage,
 **Option 1: Linux/Mac**
 ```bash
 chmod +x deploy.sh
-./deploy.sh
+sudo ./deploy.sh
 ```
+
+> ⚠️ **Note:** The script requires `sudo` to manage Docker services. You'll be prompted if you forget it.
 
 **Option 2: Windows**
 ```cmd
@@ -126,8 +128,15 @@ ports:
    ```
 
 4. **Enable HTTPS/SSL:**
-   - Use Cloudflare Tunnel or nginx reverse proxy
-   - Example: `https://palworld-panel.example.com`
+   - **Option A (Easiest):** Use Cloudflare Tunnel - automatic HTTPS, no firewall setup needed
+     ```bash
+     sudo ./deploy.sh
+     # Select 'y' when prompted for Cloudflare Tunnel
+     ```
+   - **Option B (Advanced):** Use nginx reverse proxy (requires domain + SSL cert)
+     ```
+     https://palworld-panel.example.com
+     ```
 
 5. **Firewall Rules:**
    ```bash
@@ -193,6 +202,26 @@ palworld-panel/
 ├── Dockerfile                 # Panel container image
 └── Dockerfile.palworld        # Game server container image
 ```
+
+## 🚀 Public Access (Cloudflare Tunnel)
+
+After running `sudo ./deploy.sh`, you'll be prompted to set up **Cloudflare Tunnel** for public access:
+
+```bash
+Setup Cloudflare Tunnel for public access? [y/N]: y
+```
+
+This will:
+1. Install and configure Cloudflare Tunnel (cloudflared)
+2. Generate a public URL for your panel
+3. Keep your server safe behind Cloudflare's security
+
+**Public URL example:**
+```
+https://palworld-panel-xxxxx.trycloudflare.com
+```
+
+> No firewall configuration needed! Cloudflare handles all the networking.
 
 ## 🚀 Deployment
 

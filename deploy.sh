@@ -20,6 +20,20 @@ echo -e "${BLUE}Palworld Panel - Deployment Script${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
+# Check if running as sudo
+if [[ $EUID -ne 0 ]]; then
+   echo -e "${YELLOW}⚠️  WARNING: This script should be run with sudo${NC}"
+   echo -e "${YELLOW}Please run: sudo ./deploy.sh${NC}"
+   echo ""
+   read -p "$(echo -e ${YELLOW}Continue anyway? [y/N]:${NC}) " -n 1 -r
+   echo ""
+   if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+       exit 1
+   fi
+fi
+
+echo ""
+
 # Check if Docker is installed
 if ! command -v docker &> /dev/null; then
     echo -e "${RED}❌ Docker is not installed${NC}"
@@ -100,15 +114,39 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}✅ Deployment Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo "📍 Access the panel at: http://localhost:8080"
+echo "📍 Local access: http://localhost:8080"
 echo ""
 echo "📝 Default credentials:"
 echo "   Username: admin"
 echo "   Password: (check your .env file)"
 echo ""
-echo "📊 View logs:"
-echo "   docker-compose logs -f palworld-panel"
+
+# Ask about Cloudflare Tunnel setup
 echo ""
-echo "🛑 Stop services:"
-echo "   docker-compose down"
+read -p "$(echo -e ${BLUE}Setup Cloudflare Tunnel for public access? [y/N]:${NC}) " -n 1 -r
 echo ""
+
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo ""
+    echo -e "${BLUE}Setting up Cloudflare Tunnel...${NC}"
+    
+    # Check if cloudflared is installed
+    if ! command -v cloudflared &> /dev/null; then
+        echo -e "${YELLOW}⚠️  cloudflared is not installed${NC}"
+        echo "Install with: brew install cloudflare/cloudflare/cloudflared"
+        echo "Or: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/"
+    else
+        echo -e "${BLUE}Starting Cloudflare Tunnel...${NC}"
+        echo "This will display your public URL. Keep this terminal open to maintain the tunnel."
+        echo ""
+        cloudflared tunnel --url http://localhost:8080
+    fi
+else
+    echo ""
+    echo "📊 View logs:"
+    echo "   docker-compose logs -f palworld-panel"
+    echo ""
+    echo "🛑 Stop services:"
+    echo "   docker-compose down"
+    echo ""
+fi
