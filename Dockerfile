@@ -8,8 +8,8 @@ WORKDIR /build/frontend
 # Copy package files
 COPY frontend/package*.json ./
 
-# Install dependencies with npm ci for production
-RUN npm ci --only=production
+# Install dependencies with npm install for production
+RUN npm install --omit=dev
 
 # Copy frontend source
 COPY frontend/ .
@@ -48,8 +48,8 @@ WORKDIR /app
 # Copy package files
 COPY backend/package*.json ./
 
-# Install dependencies with npm ci for production
-RUN npm ci --only=production
+# Install dependencies with npm install for production
+RUN npm install --omit=dev
 
 # Copy backend application
 COPY backend/ .
