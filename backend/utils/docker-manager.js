@@ -2,12 +2,14 @@ const Docker = require('dockerode');
 const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
+const { execSync } = require('child_process');
 
 // Initialize Docker client
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
 
 const containerLoggers = new Map(); // Track log streams
 const emitter = new EventEmitter();
+const buildingImages = new Map(); // Track ongoing image builds
 
 class DockerManager {
   constructor() {
@@ -16,11 +18,129 @@ class DockerManager {
   }
 
   /**
+   * Check if Docker image exists
+   */
+  async imageExists(imageName) {
+    try {
+      const images = await docker.listImages();
+      return images.some(img => 
+        img.RepoTags && img.RepoTags.includes(imageName)
+      );
+    } catch (error) {
+      console.error(`❌ Error checking image: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Build Docker image if it doesn't exist
+   */
+  async ensureImageExists(imageName, dockerfile) {
+    // If already building, wait for it
+    if (buildingImages.has(imageName)) {
+      console.log(`⏳ Image ${imageName} is already being built, waiting...`);
+      await buildingImages.get(imageName);
+      return;
+    }
+
+    // Check if image already exists
+    if (await this.imageExists(imageName)) {
+      console.log(`✅ Image ${imageName} already exists`);
+      return;
+    }
+
+    console.log(`🔨 Building Docker image: ${imageName}...`);
+    
+    // Create build promise
+    const buildPromise = this.buildImage(imageName, dockerfile);
+    buildingImages.set(imageName, buildPromise);
+
+    try {
+      await buildPromise;
+      console.log(`✅ Image ${imageName} built successfully`);
+    } finally {
+      buildingImages.delete(imageName);
+    }
+  }
+
+  /**
+   * Build Docker image
+   */
+  async buildImage(imageName, dockerfile) {
+    return new Promise((resolve, reject) => {
+      const projectRoot = path.join(__dirname, '../../');
+      const dockerfilePath = path.join(projectRoot, dockerfile);
+
+      if (!fs.existsSync(dockerfilePath)) {
+        reject(new Error(`Dockerfile not found: ${dockerfilePath}`));
+        return;
+      }
+
+      console.log(`📁 Building from: ${dockerfilePath}`);
+
+      docker.buildImage(
+        {
+          dockerfile: dockerfile,
+          t: imageName,
+          context: projectRoot
+        },
+        { buildargs: {} },
+        (err, response) => {
+          if (err) {
+            console.error(`❌ Build error: ${err.message}`);
+            reject(err);
+            return;
+          }
+
+          let buildOutput = '';
+          
+          response.on('data', (chunk) => {
+            const str = chunk.toString();
+            buildOutput += str;
+            
+            // Parse Docker build output
+            try {
+              const json = JSON.parse(str);
+              if (json.status) {
+                console.log(`  📦 ${json.status}`);
+                if (json.progress) {
+                  console.log(`     ${json.progress}`);
+                }
+              }
+              if (json.error) {
+                console.error(`  ❌ ${json.error}`);
+              }
+            } catch (e) {
+              // Not JSON, just log it
+              if (str.trim()) {
+                console.log(`  ${str.trim()}`);
+              }
+            }
+          });
+
+          response.on('end', () => {
+            console.log(`✅ Image build completed: ${imageName}`);
+            resolve();
+          });
+
+          response.on('error', (err) => {
+            console.error(`❌ Build stream error: ${err.message}`);
+            reject(err);
+          });
+        }
+      );
+    });
+  }
+
+  /**
    * Create and start a new Palworld server container
    */
   async createServerContainer(serverId, serverConfig) {
     try {
       console.log(`🐳 Creating container for server ${serverId}...`);
+
+      // Ensure Palworld image exists (auto-build if needed)
+      await this.ensureImageExists('palworld-server:latest', 'Dockerfile.palworld');
 
       const containerName = `palworld-${serverId}`;
       const port = serverConfig.port;

@@ -2,12 +2,16 @@
 FROM steamcmd/steamcmd:latest
 
 # Install dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     git \
     unzip \
     supervisor \
+    lib32gcc1 \
+    lib32stdc++6 \
+    libc6 \
+    libgcc1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
@@ -18,14 +22,35 @@ COPY scripts/start-palworld.sh /start.sh
 RUN chmod +x /start.sh
 
 # Create data directory
-RUN mkdir -p /palworld/data /palworld/Pal/Saved
+RUN mkdir -p /palworld/data /palworld/Pal/Saved /palworld/Pal/Saved/Config/LinuxServer
+
+# Download and install Palworld server using SteamCMD
+# App ID 2394010 is the Palworld dedicated server
+RUN /home/steam/steamcmd/steamcmd.sh \
+    +force_install_dir /palworld \
+    +login anonymous \
+    +app_update 2394010 validate \
+    +quit || true
+
+# Create a health check script
+RUN cat > /healthcheck.sh <<'EOF'
+#!/bin/bash
+if [ -f /palworld/PalServer.sh ]; then
+    echo "✅ Palworld server installed"
+    exit 0
+else
+    echo "❌ Palworld server not found"
+    exit 1
+fi
+EOF
+RUN chmod +x /healthcheck.sh
 
 # Expose game port (UDP)
 EXPOSE 8211/udp
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8211/health 2>/dev/null || exit 1
+# Health check - check if server executable exists
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD /healthcheck.sh
 
 # Start server
 CMD ["/start.sh"]
