@@ -9,7 +9,6 @@ services:
     hostname: palworld-panel
     ports:
       - "8080:8080"
-      - "8211-8300:8211-8300/udp"
     environment:
       - NODE_ENV=production
       - PORT=8080
@@ -20,13 +19,14 @@ services:
       - PALWORLD_INSTALL_DIR=/palworld
       - DOCKER_CONTEXT=/project
     volumes:
-      - palworld_data:/palworld
       - palworld_app_data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
       - .:/project
     restart: unless-stopped
     networks:
       - palworld-net
+    depends_on:
+      - palworld
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
       interval: 30s
@@ -41,12 +41,48 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # Production Palworld Server using pre-built image
+  palworld:
+    image: thijsvanloef/palworld-server-docker:latest
+    container_name: palworld-server
+    hostname: palworld-server
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - "8211:8211/udp"
+      - "27015:27015/udp"  # Community server tab
+      # - "8212:8212/tcp"   # REST API (uncomment if REST_API_ENABLED: true)
+      - "25575:25575/tcp"  # RCON
+    environment:
+      PUID: 1000
+      PGID: 1000
+      PORT: 8211
+      PLAYERS: ${PLAYERS:-32}
+      MULTITHREADING: "true"
+      COMMUNITY: ${COMMUNITY:-false}
+      PUBLIC_IP: ${PUBLIC_IP:-}
+      PUBLIC_PORT: ${PUBLIC_PORT:-8211}
+      SERVER_PASSWORD: ${SERVER_PASSWORD:-}
+      ADMIN_PASSWORD: ${PALWORLD_ADMIN_PASSWORD:-adminPassword123}
+      SERVER_NAME: ${SERVER_NAME:-Palworld Server}
+      SERVER_DESCRIPTION: ${SERVER_DESCRIPTION:-Managed by Palworld Server Panel}
+      RCON_ENABLED: "true"
+      RCON_PORT: 25575
+      TZ: UTC
+    volumes:
+      - ./palworld:/palworld
+    networks:
+      - palworld-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 networks:
   palworld-net:
     driver: bridge
 
 volumes:
-  palworld_data:
-    driver: local
   palworld_app_data:
     driver: local

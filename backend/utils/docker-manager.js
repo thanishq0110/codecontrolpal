@@ -2,7 +2,7 @@ const Docker = require('dockerode');
 const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 
 // Initialize Docker client
 const docker = new Docker({ socketPath: '/var/run/docker.sock' });
@@ -64,12 +64,11 @@ class DockerManager {
   }
 
   /**
-   * Build Docker image
+   * Build Docker image using tar stream via stdin
    */
   async buildImage(imageName, dockerfile) {
     return new Promise((resolve, reject) => {
       try {
-        // Use /project if running in Docker, otherwise use local path
         const projectRoot = process.env.DOCKER_CONTEXT || path.join(__dirname, '../../');
         const dockerfilePath = path.join(projectRoot, dockerfile);
 
@@ -79,26 +78,63 @@ class DockerManager {
         }
 
         console.log(`📁 Building from: ${projectRoot}/${dockerfile}`);
+        console.log(`🔨 Building image: ${imageName}...`);
         
-        // Use docker CLI for building - simpler and more reliable
-        const buildCommand = `docker build -f "${dockerfile}" -t "${imageName}" "${projectRoot}"`;
-        console.log(`🔨 Executing: ${buildCommand.substring(0, 80)}...`);
-        
-        const output = execSync(buildCommand, {
-          cwd: projectRoot,
-          encoding: 'utf8',
-          stdio: 'pipe'
+        // Create tar of project directory and pipe to docker build
+        const tar = spawn('tar', ['-C', projectRoot, '-czf', '-', '.'], {
+          stdio: ['ignore', 'pipe', 'pipe']
         });
-        
-        // Log build output
-        output.split('\n').forEach(line => {
-          if (line.trim()) {
-            console.log(`  ${line}`);
+
+        const dockerBuild = spawn('docker', [
+          'build',
+          '--file', dockerfile,
+          '-t', imageName,
+          '-'
+        ], {
+          stdio: ['pipe', 'pipe', 'pipe']
+        });
+
+        // Pipe tar output to docker build input
+        tar.stdout.pipe(dockerBuild.stdin);
+
+        let buildOutput = '';
+        let errorOutput = '';
+
+        dockerBuild.stdout.on('data', (data) => {
+          const output = data.toString();
+          buildOutput += output;
+          output.split('\n').forEach(line => {
+            if (line.trim()) {
+              console.log(`  ${line}`);
+            }
+          });
+        });
+
+        dockerBuild.stderr.on('data', (data) => {
+          const error = data.toString();
+          errorOutput += error;
+        });
+
+        tar.on('error', (err) => {
+          console.error(`❌ Tar error: ${err.message}`);
+          reject(err);
+        });
+
+        dockerBuild.on('error', (err) => {
+          console.error(`❌ Docker build error: ${err.message}`);
+          reject(err);
+        });
+
+        dockerBuild.on('close', (code) => {
+          if (code === 0) {
+            console.log(`✅ Image built successfully: ${imageName}`);
+            resolve();
+          } else {
+            const error = new Error(`Docker build failed with code ${code}: ${errorOutput}`);
+            console.error(`❌ Build failed: ${error.message}`);
+            reject(error);
           }
         });
-        
-        console.log(`✅ Image built successfully: ${imageName}`);
-        resolve();
       } catch (error) {
         console.error(`❌ Build error: ${error.message}`);
         reject(error);
@@ -107,48 +143,78 @@ class DockerManager {
   }
 
   /**
-   * Create and start a new Palworld server container
+   * Create and start a new Palworld server container using pre-built image
    */
   async createServerContainer(serverId, serverConfig) {
     try {
       console.log(`🐳 Creating container for server ${serverId}...`);
 
-      // Ensure Palworld image exists (auto-build if needed)
-      await this.ensureImageExists('palworld-server:latest', 'Dockerfile.palworld');
+      // Using pre-built image from thijsvanloef/palworld-server-docker
+      const imageName = 'thijsvanloef/palworld-server-docker:latest';
+      
+      // Check if image exists, if not pull it
+      if (!await this.imageExists(imageName)) {
+        console.log(`📥 Pulling image ${imageName}...`);
+        try {
+          const stream = await docker.pull(imageName);
+          await new Promise((resolve, reject) => {
+            docker.modem.followProgress(stream, (err, res) => {
+              if (err) reject(err);
+              else resolve(res);
+            });
+          });
+          console.log(`✅ Image pulled: ${imageName}`);
+        } catch (error) {
+          console.error(`❌ Failed to pull image: ${error.message}`);
+          throw error;
+        }
+      }
 
       const containerName = `palworld-${serverId}`;
-      const port = serverConfig.port;
-      const maxPlayers = serverConfig.max_players;
-      const difficulty = serverConfig.difficulty;
-      const serverName = serverConfig.server_name;
+      const port = serverConfig.port || 8211;
+      const maxPlayers = serverConfig.max_players || 32;
+      const serverName = serverConfig.server_name || `Palworld Server ${serverId}`;
+      const serverPassword = serverConfig.server_password || '';
 
-      // Container configuration
+      // Container configuration for pre-built image
       const containerConfig = {
-        Image: 'palworld-server:latest',
+        Image: imageName,
         name: containerName,
         Hostname: containerName,
         Env: [
-          `SERVER_NAME=${serverName}`,
+          'PUID=1000',
+          'PGID=1000',
           `PORT=${port}`,
-          `MAX_PLAYERS=${maxPlayers}`,
-          `DIFFICULTY=${difficulty}`,
-          `SERVER_ID=${serverId}`
+          `PLAYERS=${maxPlayers}`,
+          `SERVER_NAME=${serverName}`,
+          `SERVER_DESCRIPTION=Managed by Palworld Panel - ${serverId}`,
+          `SERVER_PASSWORD=${serverPassword}`,
+          `ADMIN_PASSWORD=${serverConfig.admin_password || 'adminPassword123'}`,
+          'MULTITHREADING=true',
+          'RCON_ENABLED=true',
+          'RCON_PORT=25575',
+          'COMMUNITY=false',
+          'TZ=UTC'
         ],
         ExposedPorts: {
-          [`${port}/udp`]: {}
+          [`${port}/udp`]: {},
+          '25575/tcp': {}  // RCON
         },
         HostConfig: {
           PortBindings: {
-            [`${port}/udp`]: [{ HostIp: '0.0.0.0', HostPort: `${port}` }]
+            [`${port}/udp`]: [{ HostIp: '0.0.0.0', HostPort: `${port}` }],
+            '25575/tcp': [{ HostIp: '0.0.0.0', HostPort: '25575' }]
           },
           Memory: 4294967296, // 4GB
           MemorySwap: 4294967296,
           CpuShares: 1024,
-          RestartPolicy: { Name: 'unless-stopped', MaximumRetryCount: 5 }
+          RestartPolicy: { Name: 'unless-stopped', MaximumRetryCount: 5 },
+          Binds: [`${serverId}-palworld:/palworld`]  // Named volume for persistence
         },
         Labels: {
           'palworld-panel': 'true',
-          'server-id': serverId
+          'server-id': serverId,
+          'managed-by': 'palworld-panel'
         }
       };
 
@@ -165,6 +231,7 @@ class DockerManager {
         id: container.id,
         name: containerName,
         config: serverConfig,
+        image: imageName,
         startTime: Date.now(),
         container
       });
@@ -474,6 +541,39 @@ class DockerManager {
       return { success: true, output };
     } catch (error) {
       console.error(`❌ Failed to send console command:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Send RCON command to Palworld server
+   * Requires RCON_ENABLED=true in container environment
+   */
+  async sendRconCommand(serverId, command) {
+    try {
+      const containerInfo = this.containers.get(serverId);
+      if (!containerInfo) throw new Error('Container not found');
+
+      // Get RCON port from container config (default: 25575)
+      const rconPort = 25575;
+      const adminPassword = containerInfo.config.admin_password || 'adminPassword123';
+
+      // Use rcon-cli to send commands
+      // Install: apt-get install -y rcon-cli
+      const rconCommand = `echo "${command}" | nc localhost ${rconPort}`;
+      
+      console.log(`📡 Sending RCON command: ${command}`);
+      const output = await this.executeCommand(serverId, rconCommand);
+
+      this.addLog(serverId, `[RCON] ${command}`);
+      if (output) this.addLog(serverId, `[RCON] Response: ${output}`);
+
+      emitter.emit('rcon:command', { serverId, command, output });
+      global.io?.emit(`server:${serverId}:rcon`, { command, response: output });
+
+      return { success: true, output };
+    } catch (error) {
+      console.error(`❌ Failed to send RCON command:`, error.message);
       throw error;
     }
   }
