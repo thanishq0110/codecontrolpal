@@ -68,68 +68,41 @@ class DockerManager {
    */
   async buildImage(imageName, dockerfile) {
     return new Promise((resolve, reject) => {
-      // Use /project if running in Docker, otherwise use local path
-      const projectRoot = process.env.DOCKER_CONTEXT || path.join(__dirname, '../../');
-      const dockerfilePath = path.join(projectRoot, dockerfile);
+      try {
+        // Use /project if running in Docker, otherwise use local path
+        const projectRoot = process.env.DOCKER_CONTEXT || path.join(__dirname, '../../');
+        const dockerfilePath = path.join(projectRoot, dockerfile);
 
-      if (!fs.existsSync(dockerfilePath)) {
-        reject(new Error(`Dockerfile not found: ${dockerfilePath}`));
-        return;
-      }
-
-      console.log(`📁 Building from: ${dockerfilePath}`);
-
-      docker.buildImage(
-        {
-          dockerfile: dockerfile,
-          t: imageName,
-          context: projectRoot
-        },
-        { buildargs: {} },
-        (err, response) => {
-          if (err) {
-            console.error(`❌ Build error: ${err.message}`);
-            reject(err);
-            return;
-          }
-
-          let buildOutput = '';
-          
-          response.on('data', (chunk) => {
-            const str = chunk.toString();
-            buildOutput += str;
-            
-            // Parse Docker build output
-            try {
-              const json = JSON.parse(str);
-              if (json.status) {
-                console.log(`  📦 ${json.status}`);
-                if (json.progress) {
-                  console.log(`     ${json.progress}`);
-                }
-              }
-              if (json.error) {
-                console.error(`  ❌ ${json.error}`);
-              }
-            } catch (e) {
-              // Not JSON, just log it
-              if (str.trim()) {
-                console.log(`  ${str.trim()}`);
-              }
-            }
-          });
-
-          response.on('end', () => {
-            console.log(`✅ Image build completed: ${imageName}`);
-            resolve();
-          });
-
-          response.on('error', (err) => {
-            console.error(`❌ Build stream error: ${err.message}`);
-            reject(err);
-          });
+        if (!fs.existsSync(dockerfilePath)) {
+          reject(new Error(`Dockerfile not found: ${dockerfilePath}`));
+          return;
         }
-      );
+
+        console.log(`📁 Building from: ${projectRoot}/${dockerfile}`);
+        
+        // Use docker CLI for building - simpler and more reliable
+        const buildCommand = `docker build -f "${dockerfile}" -t "${imageName}" "${projectRoot}"`;
+        console.log(`🔨 Executing: ${buildCommand.substring(0, 80)}...`);
+        
+        const output = execSync(buildCommand, {
+          cwd: projectRoot,
+          encoding: 'utf8',
+          stdio: 'pipe'
+        });
+        
+        // Log build output
+        output.split('\n').forEach(line => {
+          if (line.trim()) {
+            console.log(`  ${line}`);
+          }
+        });
+        
+        console.log(`✅ Image built successfully: ${imageName}`);
+        resolve();
+      } catch (error) {
+        console.error(`❌ Build error: ${error.message}`);
+        reject(error);
+      }
     });
   }
 
