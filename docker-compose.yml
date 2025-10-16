@@ -18,10 +18,12 @@ services:
       - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-this}
       - JWT_EXPIRY=24h
       - PALWORLD_INSTALL_DIR=/palworld
+      - DOCKER_CONTEXT=/project
     volumes:
       - palworld_data:/palworld
       - palworld_app_data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
+      - .:/project
     restart: unless-stopped
     networks:
       - palworld-net

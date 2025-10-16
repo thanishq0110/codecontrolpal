@@ -146,15 +146,17 @@ let statsInterval;
 function startStatsBroadcasting() {
   statsInterval = setInterval(async () => {
     try {
-      const sockets = io.of('/').sockets.sockets;
+      const sockets = io.sockets.sockets;
       const rooms = new Set();
       
-      // Collect unique rooms
-      for (const [, socket] of sockets) {
-        const socketRooms = Array.from(socket.rooms);
-        for (const room of socketRooms) {
-          if (room.startsWith('stats:')) {
-            rooms.add(room);
+      // Collect unique rooms - sockets is a Map in Socket.io 4+
+      if (sockets && typeof sockets.entries === 'function') {
+        for (const [, socket] of sockets) {
+          const socketRooms = Array.from(socket.rooms);
+          for (const room of socketRooms) {
+            if (room.startsWith('stats:')) {
+              rooms.add(room);
+            }
           }
         }
       }

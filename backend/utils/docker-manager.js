@@ -68,7 +68,8 @@ class DockerManager {
    */
   async buildImage(imageName, dockerfile) {
     return new Promise((resolve, reject) => {
-      const projectRoot = path.join(__dirname, '../../');
+      // Use /project if running in Docker, otherwise use local path
+      const projectRoot = process.env.DOCKER_CONTEXT || path.join(__dirname, '../../');
       const dockerfilePath = path.join(projectRoot, dockerfile);
 
       if (!fs.existsSync(dockerfilePath)) {
