@@ -20,7 +20,7 @@ RUN npm run build
 # ============================================================
 # Stage 2: Final image
 # ============================================================
-FROM ubuntu:22.04
+FROM node:18-slim
 
 # Set metadata
 LABEL maintainer="Palworld Panel"
@@ -32,13 +32,11 @@ ENV NODE_ENV=production \
     NODE_PATH=/app/node_modules \
     PATH=/app/node_modules/.bin:$PATH
 
-# Install dependencies
+# Install dependencies (Node.js already included)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     ca-certificates \
-    nodejs \
-    npm \
     docker.io \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
