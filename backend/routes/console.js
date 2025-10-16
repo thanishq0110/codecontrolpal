@@ -1,8 +1,10 @@
 const express = require('express');
+const expressWs = require('express-ws');
 const { authenticateToken } = require('../middleware/auth');
 const palworldManager = require('../utils/palworld-manager');
 
 const router = express.Router();
+expressWs(router);
 
 router.get('/logs', authenticateToken, (req, res) => {
   try {
