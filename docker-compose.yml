@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  palworld-panel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: palworld-panel
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=changeme123
+      - JWT_SECRET=your-secret-key-change-this
+      - PALWORLD_INSTALL_DIR=/palworld
+    volumes:
+      - palworld_data:/palworld
+      - palworld_app_data:/app/data
+    restart: unless-stopped
+    networks:
+      - palworld-net
+
+networks:
+  palworld-net:
+    driver: bridge
+
+volumes:
+  palworld_data:
+  palworld_app_data:

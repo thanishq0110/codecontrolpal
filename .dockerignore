@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+README.md
+.DS_Store
+.env.local
+dist
+build
+.eslintcache
+frontend/node_modules
+backend/node_modules

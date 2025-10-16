@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+.DS_Store
+*.log
+.env.local
+.env
+*.pid
+backend/data/
+frontend/dist/
+.idea/
+.vscode/settings.json
