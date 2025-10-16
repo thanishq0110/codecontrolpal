@@ -1,19 +1,25 @@
 {
   "name": "palworld-panel-frontend",
   "version": "1.0.0",
-  "description": "Palworld Server Management Panel Frontend",
+  "description": "Palworld Server Management Panel - Production Ready Frontend",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "echo \"No linter configured yet\""
   },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",
     "axios": "^1.6.2",
-    "lucide-react": "^0.294.0"
+    "lucide-react": "^0.294.0",
+    "socket.io-client": "^4.7.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",

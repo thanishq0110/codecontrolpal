@@ -1,44 +1,74 @@
+# ============================================================
 # Stage 1: Build frontend
+# ============================================================
 FROM node:18-alpine AS frontend-builder
+
 WORKDIR /build/frontend
+
+# Copy package files
 COPY frontend/package*.json ./
-RUN npm install
+
+# Install dependencies with npm ci for production
+RUN npm ci --only=production
+
+# Copy frontend source
 COPY frontend/ .
+
+# Build frontend
 RUN npm run build
 
+# ============================================================
 # Stage 2: Final image
+# ============================================================
 FROM ubuntu:22.04
 
-# Install Node.js and dependencies
-RUN apt-get update && apt-get install -y \
+# Set metadata
+LABEL maintainer="Palworld Panel"
+LABEL description="Palworld Server Management Panel"
+LABEL version="1.0.0"
+
+# Set environment variables
+ENV NODE_ENV=production \
+    NODE_PATH=/app/node_modules \
+    PATH=/app/node_modules/.bin:$PATH
+
+# Install dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    wget \
+    ca-certificates \
     nodejs \
     npm \
-    wget \
-    git \
-    unzip \
-    && rm -rf /var/lib/apt/lists/*
+    docker.io \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Create app directory
 WORKDIR /app
 
-# Copy backend files
+# Copy package files
 COPY backend/package*.json ./
-RUN npm install
 
+# Install dependencies with npm ci for production
+RUN npm ci --only=production
+
+# Copy backend application
 COPY backend/ .
 
-# Copy built frontend
+# Copy built frontend from builder stage
 COPY --from=frontend-builder /build/frontend/dist ./public
 
-# Create directories for Palworld server
-RUN mkdir -p /palworld /app/data
+# Create required directories with proper permissions
+RUN mkdir -p /palworld /app/data && \
+    chown -R node:node /app /palworld
+
+# Create app user for running as non-root
+USER node
 
 # Expose port
 EXPOSE 8080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8080/api/health || exit 1
 
 # Start application

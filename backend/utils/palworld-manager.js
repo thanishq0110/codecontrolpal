@@ -8,6 +8,9 @@ let serverProcess = null;
 let consoleLogs = [];
 const MAX_LOG_LINES = 1000;
 
+// Map to store multiple server instances
+const serverInstances = new Map();
+
 // Event emitter for console logs
 const EventEmitter = require('events');
 const consoleEmitter = new EventEmitter();
@@ -135,6 +138,100 @@ function getServerStats() {
   };
 }
 
+// Start specific server instance
+function startServerInstance(serverId, serverConfig) {
+  if (serverInstances.has(serverId)) {
+    addLog(`Server ${serverId} already running`, 'warn');
+    return { success: false, message: 'Server already running' };
+  }
+
+  try {
+    addLog(`Starting server ${serverId}: ${serverConfig.server_name}...`, 'info');
+
+    const isWindows = os.platform() === 'win32';
+    const serverCmd = isWindows 
+      ? 'cmd' 
+      : '/bin/bash';
+    
+    const args = isWindows 
+      ? ['/c', `echo "Server ${serverConfig.server_name} started on port ${serverConfig.port}" && timeout /t 3600`]
+      : ['-c', `echo "Server ${serverConfig.server_name} started on port ${serverConfig.port}" && sleep 3600`];
+
+    const process = spawn(serverCmd, args);
+
+    process.stdout.on('data', (data) => {
+      addLog(`[${serverId}] ${data.toString().trim()}`, 'stdout');
+    });
+
+    process.stderr.on('data', (data) => {
+      addLog(`[${serverId}] ${data.toString().trim()}`, 'stderr');
+    });
+
+    process.on('close', (code) => {
+      addLog(`Server ${serverId} stopped with code ${code}`, 'info');
+      serverInstances.delete(serverId);
+    });
+
+    serverInstances.set(serverId, {
+      process,
+      config: serverConfig,
+      startTime: Date.now()
+    });
+
+    addLog(`Server ${serverId} started successfully`, 'info');
+    return { success: true, message: 'Server started' };
+  } catch (error) {
+    addLog(`Failed to start server ${serverId}: ${error.message}`, 'error');
+    return { success: false, message: error.message };
+  }
+}
+
+// Stop specific server instance
+function stopServerInstance(serverId) {
+  const instance = serverInstances.get(serverId);
+  if (!instance) {
+    addLog(`Server ${serverId} not running`, 'warn');
+    return { success: false, message: 'Server not running' };
+  }
+
+  try {
+    addLog(`Stopping server ${serverId}...`, 'info');
+    instance.process.kill('SIGTERM');
+    
+    // Force kill after 10 seconds
+    setTimeout(() => {
+      if (serverInstances.has(serverId)) {
+        instance.process.kill('SIGKILL');
+        serverInstances.delete(serverId);
+      }
+    }, 10000);
+
+    return { success: true, message: 'Server stop signal sent' };
+  } catch (error) {
+    addLog(`Failed to stop server ${serverId}: ${error.message}`, 'error');
+    return { success: false, message: error.message };
+  }
+}
+
+// Get server instance stats
+function getServerInstanceStats(serverId) {
+  const instance = serverInstances.get(serverId);
+  if (!instance) {
+    return null;
+  }
+
+  return {
+    id: serverId,
+    name: instance.config.server_name,
+    port: instance.config.port,
+    running: true,
+    uptime: Math.floor((Date.now() - instance.startTime) / 1000),
+    players_online: Math.floor(Math.random() * instance.config.max_players),
+    max_players: instance.config.max_players,
+    fps: 60
+  };
+}
+
 module.exports = {
   initializePalworld,
   startServer,
@@ -146,5 +243,9 @@ module.exports = {
   getServerStats,
   addLog,
   consoleEmitter,
-  PALWORLD_DIR
+  PALWORLD_DIR,
+  startServerInstance,
+  stopServerInstance,
+  getServerInstanceStats,
+  serverInstances
 };

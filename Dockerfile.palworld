@@ -1,0 +1,31 @@
+# Palworld Server Container
+FROM steamcmd/steamcmd:latest
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    unzip \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /palworld
+
+# Copy startup script
+COPY scripts/start-palworld.sh /start.sh
+RUN chmod +x /start.sh
+
+# Create data directory
+RUN mkdir -p /palworld/data /palworld/Pal/Saved
+
+# Expose game port (UDP)
+EXPOSE 8211/udp
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8211/health 2>/dev/null || exit 1
+
+# Start server
+CMD ["/start.sh"]

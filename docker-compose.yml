@@ -6,20 +6,38 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: palworld-panel
+    hostname: palworld-panel
     ports:
       - "8080:8080"
+      - "8211-8300:8211-8300/udp"
     environment:
       - NODE_ENV=production
-      - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=changeme123
-      - JWT_SECRET=your-secret-key-change-this
+      - PORT=8080
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme123}
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-this}
+      - JWT_EXPIRY=24h
       - PALWORLD_INSTALL_DIR=/palworld
     volumes:
       - palworld_data:/palworld
       - palworld_app_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
     networks:
       - palworld-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
 
 networks:
   palworld-net:
@@ -27,4 +45,6 @@ networks:
 
 volumes:
   palworld_data:
+    driver: local
   palworld_app_data:
+    driver: local

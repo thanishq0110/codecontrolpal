@@ -53,6 +53,24 @@ function initializeDatabase() {
       )
     `);
 
+    // Servers table
+    database.run(`
+      CREATE TABLE IF NOT EXISTS servers (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        server_name TEXT NOT NULL,
+        max_players INTEGER DEFAULT 32,
+        difficulty TEXT DEFAULT 'Normal',
+        port INTEGER UNIQUE NOT NULL,
+        container_id TEXT,
+        running BOOLEAN DEFAULT 0,
+        uptime INTEGER DEFAULT 0,
+        players_online INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
+    `);
+
     // Create default admin user if not exists
     const bcrypt = require('bcryptjs');
     const adminUsername = process.env.ADMIN_USERNAME || 'admin';
