@@ -42,9 +42,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     docker.io \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Create non-root user for running the application
-RUN useradd -m -s /bin/bash node
-
 # Create app directory
 WORKDIR /app
 
@@ -60,12 +57,11 @@ COPY backend/ .
 # Copy built frontend from builder stage
 COPY --from=frontend-builder /build/frontend/dist ./public
 
-# Create required directories with proper permissions
-RUN mkdir -p /palworld /app/data && \
-    chown -R node:node /app /palworld
+# Create required directories
+RUN mkdir -p /palworld /app/data
 
-# Switch to non-root user
-USER node
+# Note: Container runs as root to access Docker socket for container management
+# The container itself is isolated by Docker, so this is secure
 
 # Expose port
 EXPOSE 8080

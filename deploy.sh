@@ -102,12 +102,22 @@ echo ""
 echo -e "${BLUE}4/4 Waiting for services to be ready...${NC}"
 sleep 5
 
-# Check health
-if curl -f http://localhost:8080/api/health &> /dev/null; then
-    echo -e "${GREEN}✅ Health check passed${NC}"
-else
-    echo -e "${YELLOW}⚠️  Health check timeout (service may still be starting)${NC}"
-fi
+# Check health with retries
+HEALTH_CHECK_RETRIES=5
+HEALTH_CHECK_WAIT=2
+for i in $(seq 1 $HEALTH_CHECK_RETRIES); do
+    if curl -f http://localhost:8080/api/health &> /dev/null; then
+        echo -e "${GREEN}✅ Health check passed${NC}"
+        break
+    fi
+    if [ $i -lt $HEALTH_CHECK_RETRIES ]; then
+        echo -e "${YELLOW}⏳ Health check attempt $i/$HEALTH_CHECK_RETRIES failed, retrying in ${HEALTH_CHECK_WAIT}s...${NC}"
+        sleep $HEALTH_CHECK_WAIT
+    else
+        echo -e "${YELLOW}⚠️  Health check timeout (service may still be starting)${NC}"
+        echo -e "${YELLOW}View logs with: sudo docker-compose logs -f palworld-panel${NC}"
+    fi
+done
 
 echo ""
 echo -e "${GREEN}========================================${NC}"
@@ -143,10 +153,13 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     fi
 else
     echo ""
-    echo "📊 View logs:"
-    echo "   docker-compose logs -f palworld-panel"
+    echo "📊 View logs (if needed):"
+    echo "   sudo docker-compose logs -f palworld-panel"
     echo ""
     echo "🛑 Stop services:"
-    echo "   docker-compose down"
+    echo "   sudo docker-compose down"
     echo ""
 fi
+
+echo "⚠️  Note: Use 'sudo' for docker-compose commands in the future"
+echo ""
